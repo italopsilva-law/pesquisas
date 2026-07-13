@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa de Preços · PNCP + BPS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---- tokens ---- */
+    --ink:#132523;          /* texto / estrutura */
+    --ink-2:#3d514e;        /* texto secundário */
+    --porcelain:#eef1f0;    /* fundo */
+    --card:#f9fbfa;         /* superfícies */
+    --line:#d3dcd9;         /* hairlines */
+    --petrol:#0e5c5b;       /* primário institucional */
+    --petrol-ink:#0a4342;
+    --band:#2f8f6b;         /* preço dentro da faixa */
+    --band-soft:#d3ebe0;
+    --discard:#9aa8a4;      /* descartado */
+    --alert:#a32c2c;        /* sobrepreço / acima CMED */
+    --alert-soft:#f2dcda;
+    --cmed:#8a5a00;         /* teto regulado */
+    --focus:#0e5c5b;
+    --shadow:0 1px 0 rgba(19,37,35,.04), 0 8px 24px -18px rgba(19,37,35,.5);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--porcelain);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  .wrap{max-width:940px;margin:0 auto;padding:0 20px}
+
+  /* ---------- cabeçalho ---------- */
+  header.top{border-bottom:1px solid var(--line);background:var(--card)}
+  .brand{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding:22px 0 20px}
+  .mark{
+    font-family:"Space Grotesk",sans-serif;font-weight:700;font-size:22px;letter-spacing:-.01em;
+    color:var(--petrol-ink);display:flex;align-items:center;gap:10px
+  }
+  .mark .glyph{
+    width:22px;height:22px;flex:0 0 auto;border-radius:3px;
+    background:
+      linear-gradient(var(--petrol),var(--petrol)) left/3px 100% no-repeat,
+      linear-gradient(var(--band),var(--band)) 7px 30%/9px 3px no-repeat,
+      linear-gradient(var(--band),var(--band)) 7px 62%/14px 3px no-repeat,
+      linear-gradient(var(--alert),var(--alert)) 7px 46%/6px 3px no-repeat;
+    background-color:var(--band-soft);
+  }
+  .sub{font-size:12.5px;color:var(--ink-2);letter-spacing:.02em}
+  .sub b{color:var(--ink);font-weight:600}
+
+  /* ---------- console de consulta ---------- */
+  .console{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    box-shadow:var(--shadow);margin:24px 0;overflow:hidden}
+  .console .rowhdr{padding:13px 18px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .rowhdr h1{font-family:"Space Grotesk",sans-serif;font-size:14px;font-weight:600;
+    margin:0;letter-spacing:.01em}
+  .rowhdr .hint{font-size:12px;color:var(--ink-2)}
+  form{padding:18px;display:grid;grid-template-columns:repeat(12,1fr);gap:14px 16px}
+  .f{display:flex;flex-direction:column;gap:6px}
+  .f.span6{grid-column:span 6}.f.span4{grid-column:span 4}.f.span3{grid-column:span 3}
+  .f.span12{grid-column:span 12}
+  label{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+  label .opt{font-weight:400;text-transform:none;letter-spacing:0;color:var(--discard)}
+  input[type=text],input[type=number],select{
+    font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:7px;background:#fff;color:var(--ink);width:100%
+  }
+  input:focus,select:focus{outline:2px solid var(--focus);outline-offset:1px;border-color:var(--petrol)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{position:relative}
+  .chip input{position:absolute;opacity:0;width:1px;height:1px}
+  .chip span{display:inline-block;padding:8px 13px;border:1px solid var(--line);border-radius:999px;
+    font-size:13px;cursor:pointer;background:#fff;user-select:none;transition:.12s}
+  .chip input:checked+span{background:var(--petrol);border-color:var(--petrol);color:#fff}
+  .chip input:focus-visible+span{outline:2px solid var(--focus);outline-offset:2px}
+  .actions{grid-column:span 12;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    border-top:1px solid var(--line);margin-top:2px;padding-top:16px}
+  button.go{font:inherit;font-weight:600;font-size:14px;color:#fff;background:var(--petrol);
+    border:0;border-radius:8px;padding:11px 20px;cursor:pointer;letter-spacing:.01em;transition:.12s}
+  button.go:hover{background:var(--petrol-ink)}
+  button.go:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  button.go[disabled]{opacity:.6;cursor:progress}
+  .modenote{font-size:12px;color:var(--ink-2)}
+  .modenote code{font-family:"IBM Plex Mono",monospace;background:#e6ecea;padding:1px 5px;border-radius:4px}
+
+  /* ---------- síntese ---------- */
+  .synth{display:none;align-items:center;gap:22px;flex-wrap:wrap;
+    padding:15px 18px;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:18px}
+  .synth .s{display:flex;flex-direction:column}
+  .synth .s b{font-family:"IBM Plex Mono",monospace;font-size:18px;font-weight:600;color:var(--petrol-ink)}
+  .synth .s small{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2)}
+  .synth .grow{margin-left:auto;font-size:12px;color:var(--ink-2);text-align:right}
+
+  /* ---------- resultados ---------- */
+  #results{display:flex;flex-direction:column;gap:14px;padding-bottom:60px}
+  .item{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+    box-shadow:var(--shadow)}
+  .item.reveal{animation:rise .3s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .item .head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+  .item .desc{font-weight:500;font-size:15px;color:var(--ink);margin:0 0 3px}
+  .item .meta{font-size:12px;color:var(--ink-2);display:flex;gap:10px;flex-wrap:wrap}
+  .item .meta .cat{font-family:"IBM Plex Mono",monospace;color:var(--petrol-ink)}
+  .badge{font-size:11px;font-weight:600;letter-spacing:.03em;padding:4px 9px;border-radius:999px;white-space:nowrap}
+  .badge.ok{background:var(--band-soft);color:var(--petrol-ink)}
+  .badge.no{background:#e6e9e8;color:var(--ink-2)}
+
+  .price{display:flex;align-items:baseline;gap:10px;margin:12px 0 2px}
+  .price .val{font-family:"IBM Plex Mono",monospace;font-size:26px;font-weight:600;color:var(--ink);letter-spacing:-.01em}
+  .price .val.na{color:var(--discard);font-size:18px}
+  .price .method{font-size:12px;color:var(--ink-2)}
+  .price .cmed{margin-left:auto;font-size:12px;text-align:right;color:var(--ink-2)}
+  .price .cmed .over{color:var(--alert);font-weight:600}
+
+  /* faixa de preços — elemento assinatura */
+  .band{margin:14px 0 6px}
+  .band .track{position:relative;height:44px}
+  .band .axis{position:absolute;left:0;right:0;top:26px;height:1px;background:var(--line)}
+  .band .span{position:absolute;top:22px;height:9px;background:var(--band-soft);border-radius:5px}
+  .band .over-region{position:absolute;top:6px;bottom:6px;background:repeating-linear-gradient(
+      -45deg,var(--alert-soft),var(--alert-soft) 4px,transparent 4px,transparent 8px);
+    border-left:1px dashed var(--alert);opacity:.9;border-radius:0 4px 4px 0}
+  .tick{position:absolute;top:19px;width:2px;height:15px;border-radius:2px;background:var(--band);
+    transform:translateX(-1px)}
+  .tick.discard{background:var(--discard);height:9px;top:22px;opacity:.75}
+  .tick.median{top:8px;height:34px;width:2px;background:var(--ink)}
+  .tick.est{top:12px;height:26px;width:3px;background:var(--petrol)}
+  .tick.cmed{top:4px;height:40px;width:2px;background:var(--cmed)}
+  .lbl{position:absolute;font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--ink-2);
+    top:0;transform:translateX(-50%);white-space:nowrap}
+  .lbl.min{left:0;transform:none}.lbl.max{right:0;transform:none}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:11.5px;color:var(--ink-2)}
+  .legend i{display:inline-block;width:16px;height:0;border-top-width:3px;border-top-style:solid;
+    vertical-align:middle;margin-right:5px}
+  .legend .l-in i{border-color:var(--band)}
+  .legend .l-out i{border-color:var(--discard)}
+  .legend .l-med i{border-color:var(--ink)}
+  .legend .l-est i{border-color:var(--petrol)}
+  .legend .l-cmed i{border-color:var(--cmed)}
+
+  details.sources{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  details.sources summary{font-size:12.5px;color:var(--petrol-ink);cursor:pointer;font-weight:500;list-style:none}
+  details.sources summary::-webkit-details-marker{display:none}
+  details.sources summary::before{content:"▸ ";color:var(--discard)}
+  details.sources[open] summary::before{content:"▾ "}
+  table{width:100%;border-collapse:collapse;margin-top:10px;font-size:12.5px}
+  th{text-align:left;font-weight:600;color:var(--ink-2);font-size:11px;text-transform:uppercase;
+    letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
+  td{padding:6px 8px;border-bottom:1px solid var(--porcelain)}
+  td.n{font-family:"IBM Plex Mono",monospace;text-align:right}
+  tr.disc td{color:var(--discard)}
+  .tag{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;letter-spacing:.03em}
+  .tag.pncp{background:#dbe7e6;color:var(--petrol-ink)}
+  .tag.bps{background:#e7e0d0;color:#6a5320}
+  .tag.dsc{background:#e6e9e8;color:var(--ink-2)}
+
+  /* estados vazio / erro */
+  .state{display:none;text-align:center;padding:46px 20px;color:var(--ink-2)}
+  .state.show{display:block}
+  .state h2{font-family:"Space Grotesk",sans-serif;font-weight:600;font-size:16px;color:var(--ink);margin:0 0 6px}
+  .state.err h2{color:var(--alert)}
+  .state p{margin:0 auto;max-width:460px;font-size:13.5px}
+
+  footer{border-top:1px solid var(--line);color:var(--ink-2);font-size:11.5px;
+    padding:18px 0 40px;line-height:1.6}
+  footer b{color:var(--ink);font-weight:600}
+
+  @media(max-width:640px){
+    .f.span6,.f.span4,.f.span3{grid-column:span 12}
+    .price .val{font-size:22px}
+    .item .head{flex-direction:column}
+  }
+  @media(prefers-reduced-motion:reduce){.item.reveal{animation:none}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <div class="mark"><span class="glyph" aria-hidden="true"></span>Mapa de Preços</div>
+      <div class="sub">Pesquisa de preços para aquisições em saúde · fontes <b>PNCP</b> + <b>BPS</b> · metodologia <b>IN SEGES/ME 65/2021</b>, art. 6º</div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <section class="console">
+    <div class="rowhdr">
+      <h1>Parâmetros da consulta</h1>
+      <span class="hint">Informe um termo/princípio ativo ou códigos CATMAT.</span>
+    </div>
+    <form id="q" autocomplete="off">
+      <div class="f span6">
+        <label for="termo">Termo ou princípio ativo</label>
+        <input type="text" id="termo" placeholder="ex.: dipirona sódica 500 mg/mL injetável">
+      </div>
+      <div class="f span6">
+        <label for="catmat">Códigos CATMAT / BR <span class="opt">— opcional, têm prioridade</span></label>
+        <input type="text" id="catmat" placeholder="ex.: BR0267851, BR0268024">
+      </div>
+
+      <div class="f span3">
+        <label for="uf">UF</label>
+        <select id="uf">
+          <option>RJ</option><option>SP</option><option>MG</option><option>ES</option>
+          <option>BA</option><option>PR</option><option>RS</option><option value="">Todas</option>
+        </select>
+      </div>
+      <div class="f span3">
+        <label for="janela">Janela (meses)</label>
+        <input type="number" id="janela" value="12" min="1" max="24">
+      </div>
+      <div class="f span6">
+        <label>Modalidades</label>
+        <div class="chips">
+          <label class="chip"><input type="checkbox" value="6" checked><span>Pregão eletrônico</span></label>
+          <label class="chip"><input type="checkbox" value="8" checked><span>Dispensa</span></label>
+          <label class="chip"><input type="checkbox" value="12"><span>Registro de preços</span></label>
+        </div>
+      </div>
+
+      <div class="f span4">
+        <label for="metodo">Método de cálculo</label>
+        <select id="metodo">
+          <option value="mediana">Mediana</option>
+          <option value="media">Média</option>
+          <option value="menor">Menor preço</option>
+        </select>
+      </div>
+      <div class="f span4">
+        <label for="oinf">Corte inferior <span class="opt">— inexequível</span></label>
+        <input type="number" id="oinf" value="50" min="0" max="90" step="5">
+      </div>
+      <div class="f span4">
+        <label for="osup">Corte superior <span class="opt">— excessivo</span></label>
+        <input type="number" id="osup" value="50" min="0" max="200" step="5">
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="go" id="btn">Consultar preços</button>
+        <span class="modenote" id="mode"></span>
+      </div>
+    </form>
+  </section>
+
+  <section class="synth" id="synth" aria-live="polite">
+    <div class="s"><b class="num" id="s-itens">—</b><small>itens</small></div>
+    <div class="s"><b class="num" id="s-pncp">—</b><small>preços PNCP</small></div>
+    <div class="s"><b class="num" id="s-bps">—</b><small>preços BPS</small></div>
+    <div class="s"><b class="num" id="s-alert">—</b><small>alertas CMED</small></div>
+    <div class="grow" id="s-when"></div>
+  </section>
+
+  <div class="state show" id="empty">
+    <h2>Nenhuma consulta ainda</h2>
+    <p>Defina um termo ou um código CATMAT acima e clique em <b>Consultar preços</b> para montar a cesta de preços do item.</p>
+  </div>
+  <div class="state" id="loading"><h2>Consultando…</h2><p>Coletando contratações no PNCP e cruzando com a base do BPS.</p></div>
+  <div class="state err" id="error"><h2>Não foi possível consultar</h2><p id="error-msg"></p></div>
+
+  <section id="results"></section>
+
+  <footer class="wrap" style="padding-left:0;padding-right:0">
+    <b>Aviso metodológico.</b> Os valores são um ponto de partida, não a decisão. A IN 65/2021 (art. 6º) e a jurisprudência do TCU exigem análise crítica do preço estimado — verificar temporalidade, similaridade do objeto e quantidade de preços, descartando de forma fundamentada valores inexequíveis ou excessivos. Preços marcados como <b>descartados</b> ficam registrados para a memória de cálculo, mas a justificativa final é do integrante técnico.
+  </footer>
+</div>
+
+<script>
+/* =====================================================================
+ *  Ponto de integração: cole aqui a URL do seu Web App (/exec) do Apps
+ *  Script. Enquanto ela estiver como PLACEHOLDER, a página roda em modo
+ *  de demonstração com dados de exemplo — para você ver o layout antes
+ *  de plugar o backend.
+ *
+ *  No Apps Script: Implantar › Nova implantação › Tipo "App da Web" ›
+ *  Executar como: você · Quem tem acesso: Qualquer pessoa.
+ *  O doGet(e) deve ler e.parameter, sobrepor o CFG e devolver o array
+ *  consolidado com ContentService.createTextOutput(JSON.stringify(...))
+ *  .setMimeType(ContentService.MimeType.JSON).
+ * =================================================================== */
+const ENDPOINT = 'https://script.google.com/macros/s/AKfycbw4hcTUY9NH4Nye7c1K3lLsRy5LF_sAPEWuwlFPGHPhN06kTc9HpvDIRzX8TBJr_El5/exec';
+
+const DEMO = ENDPOINT.startsWith('COLE_AQUI');
+const $ = s => document.querySelector(s);
+const BRL = v => v==null ? '—' : v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+
+document.addEventListener('DOMContentLoaded',()=>{
+  $('#mode').innerHTML = DEMO
+    ? 'Modo demonstração — defina <code>ENDPOINT</code> para consultar dados reais.'
+    : '';
+  $('#q').addEventListener('submit',e=>{e.preventDefault();consultar();});
+});
+
+function params(){
+  const mods = [...document.querySelectorAll('.chip input:checked')].map(c=>c.value);
+  return {
+    termo: $('#termo').value.trim(),
+    catmat: $('#catmat').value.trim(),
+    uf: $('#uf').value,
+    meses: $('#janela').value,
+    modalidades: mods.join(','),
+    metodo: $('#metodo').value,
+    oinf: $('#oinf').value/100,
+    osup: $('#osup').value/100
+  };
+}
+
+function showState(id){
+  ['empty','loading','error'].forEach(s=>$('#'+s).classList.toggle('show',s===id));
+}
+
+async function consultar(){
+  const p = params();
+  if(!p.termo && !p.catmat){ erro('Informe um termo ou ao menos um código CATMAT.'); return; }
+  $('#btn').disabled = true; $('#btn').textContent='Consultando…';
+  $('#results').innerHTML=''; $('#synth').style.display='none'; showState('loading');
+  try{
+    const dados = DEMO ? await demo(p) : await real(p);
+    render(dados,p);
+  }catch(err){ erro(String(err && err.message || err)); }
+  finally{ $('#btn').disabled=false; $('#btn').textContent='Consultar preços'; }
+}
+
+function real(p){
+  const qs = new URLSearchParams(p).toString();
+  return fetch(ENDPOINT+'?'+qs,{method:'get',redirect:'follow'})
+    .then(r=>{ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+
+function erro(msg){ $('#error-msg').textContent=msg; showState('error'); }
+
+/* ---------- render ---------- */
+function render(itens,p){
+  if(!Array.isArray(itens) || !itens.length){
+    $('#empty').querySelector('h2').textContent='Nenhum preço encontrado';
+    $('#empty').querySelector('p').textContent='Nenhuma contratação com esse objeto na janela e filtros informados. Amplie a janela, revise o termo ou inclua outras modalidades.';
+    showState('empty'); return;
+  }
+  showState(null);
+  let nP=0,nB=0,nA=0;
+  itens.forEach(it=>{ nP+=it.nFontesPNCP||0; nB+=it.nFontesBPS||0;
+    if(it.precoReguladoCMED && it.precoEstimado>it.precoReguladoCMED) nA++; });
+  $('#s-itens').textContent=itens.length;
+  $('#s-pncp').textContent=nP; $('#s-bps').textContent=nB; $('#s-alert').textContent=nA;
+  $('#s-when').innerHTML='Consulta em <b>'+new Date().toLocaleString('pt-BR')+'</b><br>UF '+(p.uf||'todas')+' · janela '+p.meses+' meses · '+p.metodo;
+  $('#synth').style.display='flex';
+
+  const box=$('#results');
+  itens.forEach((it,i)=>{
+    const el=document.createElement('article');
+    el.className='item reveal'; el.style.animationDelay=(i*40)+'ms';
+    el.innerHTML=itemHTML(it);
+    box.appendChild(el);
+  });
+}
+
+function itemHTML(it){
+  const suf = it.suficiente;
+  const over = it.precoReguladoCMED && it.precoEstimado>it.precoReguladoCMED;
+  const badge = suf
+    ? '<span class="badge ok">'+it.nValidos+' preços válidos</span>'
+    : '<span class="badge no">insuficiente · &lt; 3 preços</span>';
+  const cmed = it.precoReguladoCMED
+    ? 'Teto CMED '+BRL(it.precoReguladoCMED)+(over?' · <span class="over">acima do teto</span>':' · dentro')
+    : 'Sem preço regulado';
+  return `
+    <div class="head">
+      <div>
+        <p class="desc">${esc(it.descricao||'(sem descrição)')}</p>
+        <div class="meta">
+          ${it.catmat?'<span class="cat">'+esc(it.catmat)+'</span>':''}
+          ${it.unidade?'<span>'+esc(it.unidade)+'</span>':''}
+          <span>PNCP ${it.nFontesPNCP||0} · BPS ${it.nFontesBPS||0}</span>
+        </div>
+      </div>
+      ${badge}
+    </div>
+    <div class="price">
+      <span class="val ${suf?'':'na'}">${suf?BRL(it.precoEstimado):'sem estimativa'}</span>
+      <span class="method">${it.metodo}</span>
+      <span class="cmed">${cmed}</span>
+    </div>
+    ${bandHTML(it)}
+    ${sourcesHTML(it)}
+  `;
+}
+
+/* faixa de preços (assinatura) */
+function bandHTML(it){
+  const all=(it.detalhe||[]).concat(it.descartados||[]);
+  const vals=all.map(x=>x.valorUnitario).filter(v=>v>0);
+  if(vals.length<2) return '';
+  let min=Math.min(...vals), max=Math.max(...vals);
+  if(it.precoReguladoCMED){ max=Math.max(max,it.precoReguladoCMED); }
+  const pad=(max-min)*0.06||max*0.06; min-=pad; max+=pad;
+  const pos=v=>((v-min)/(max-min)*100);
+
+  const discardSet=new Set((it.descartados||[]).map(x=>x.valorUnitario+'|'+(x.orgao||x.fornecedor||'')));
+  let ticks=all.map(x=>{
+    const d=discardSet.has(x.valorUnitario+'|'+(x.orgao||x.fornecedor||''));
+    return `<span class="tick ${d?'discard':''}" style="left:${pos(x.valorUnitario)}%" title="${BRL(x.valorUnitario)}"></span>`;
+  }).join('');
+
+  const validVals=(it.detalhe||[]).map(x=>x.valorUnitario).filter(v=>v>0).sort((a,b)=>a-b);
+  let spanEl='';
+  if(validVals.length){
+    const a=pos(validVals[0]), b=pos(validVals[validVals.length-1]);
+    spanEl=`<span class="span" style="left:${a}%;width:${b-a}%"></span>`;
+  }
+  const med = validVals.length?median(validVals):null;
+  let overRegion='';
+  let cmedTick='';
+  if(it.precoReguladoCMED){
+    const cp=pos(it.precoReguladoCMED);
+    cmedTick=`<span class="tick cmed" style="left:${cp}%" title="Teto CMED ${BRL(it.precoReguladoCMED)}"></span>`;
+    overRegion=`<span class="over-region" style="left:${cp}%;right:0"></span>`;
+  }
+  const medTick = med!=null?`<span class="tick median" style="left:${pos(med)}%" title="Mediana ${BRL(med)}"></span>`:'';
+  const estTick = it.precoEstimado!=null?`<span class="tick est" style="left:${pos(it.precoEstimado)}%" title="Estimado ${BRL(it.precoEstimado)}"></span>`:'';
+
+  return `
+    <div class="band">
+      <div class="track">
+        ${overRegion}
+        <span class="axis"></span>
+        ${spanEl}${ticks}${cmedTick}${medTick}${estTick}
+        <span class="lbl min">${BRL(min>0?min:0)}</span>
+        <span class="lbl max">${BRL(max)}</span>
+      </div>
+      <div class="legend">
+        <span class="l-in"><i></i>dentro da faixa</span>
+        <span class="l-out"><i></i>descartado</span>
+        <span class="l-med"><i></i>mediana</span>
+        <span class="l-est"><i></i>estimado</span>
+        ${it.precoReguladoCMED?'<span class="l-cmed"><i></i>teto CMED</span>':''}
+      </div>
+    </div>`;
+}
+
+function sourcesHTML(it){
+  const rows=(it.detalhe||[]).map(x=>row(x,false))
+    .concat((it.descartados||[]).map(x=>row(x,true))).join('');
+  const n=(it.detalhe||[]).length+(it.descartados||[]).length;
+  return `
+    <details class="sources">
+      <summary>Memória de cálculo — ${n} preços coletados</summary>
+      <table>
+        <thead><tr><th>Fonte</th><th>Órgão / fornecedor</th><th>Data</th><th style="text-align:right">Valor unit.</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </details>`;
+}
+function row(x,disc){
+  const tag = disc?'<span class="tag dsc">descartado</span>'
+    : x.fonte==='BPS'?'<span class="tag bps">BPS</span>':'<span class="tag pncp">PNCP</span>';
+  return `<tr class="${disc?'disc':''}">
+    <td>${tag}</td>
+    <td>${esc(x.orgao||x.fornecedor||'—')}</td>
+    <td class="n">${esc(x.data||'—')}</td>
+    <td class="n">${BRL(x.valorUnitario)}</td></tr>`;
+}
+
+function median(a){const m=Math.floor(a.length/2);return a.length%2?a[m]:(a[m-1]+a[m])/2;}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+/* ---------- dados de demonstração ---------- */
+function demo(p){
+  return new Promise(res=>setTimeout(()=>res(demoData(p)),650));
+}
+function demoData(p){
+  const term=(p.termo||p.catmat||'dipirona').toLowerCase();
+  const mk=(desc,cat,unid,precos,cmed)=>{
+    const detalhe=precos.map(x=>({fonte:x[3]||'PNCP',valorUnitario:x[0],orgao:x[1],data:x[2],fornecedor:x[1]}));
+    const med=median(detalhe.map(d=>d.valorUnitario).sort((a,b)=>a-b));
+    const piso=med*(1-(+p.oinf||0.5)), teto=med*(1+(+p.osup||0.5));
+    const val=detalhe.filter(d=>d.valorUnitario>=piso&&d.valorUnitario<=teto);
+    const dsc=detalhe.filter(d=>d.valorUnitario<piso||d.valorUnitario>teto);
+    const vv=val.map(d=>d.valorUnitario).sort((a,b)=>a-b);
+    const est=p.metodo==='media'?vv.reduce((s,x)=>s+x,0)/vv.length:p.metodo==='menor'?vv[0]:median(vv);
+    return {descricao:desc,catmat:cat,unidade:unid,metodo:p.metodo,
+      nFontesPNCP:detalhe.filter(d=>d.fonte==='PNCP').length,
+      nFontesBPS:detalhe.filter(d=>d.fonte==='BPS').length,
+      nValidos:vv.length,suficiente:vv.length>=3,precoEstimado:est,
+      precoReguladoCMED:cmed,detalhe:val,descartados:dsc};
+  };
+  const base=[
+    mk('Dipirona sódica 500 mg/mL, solução injetável, ampola 2 mL','BR0267851','Ampola',
+      [[1.18,'SES-RJ','12/03/2026','PNCP'],[1.32,'Pref. Niterói','04/02/2026','PNCP'],
+       [1.09,'HUAP-UFF','21/01/2026','BPS'],[1.27,'SES-SP','18/12/2025','BPS'],
+       [1.41,'Pref. Duque de Caxias','30/11/2025','PNCP'],[0.42,'Consórcio X','02/03/2026','PNCP'],
+       [1.22,'INTO','15/02/2026','BPS']],1.55),
+    mk('Amoxicilina 500 mg, cápsula','BR0268024','Cápsula',
+      [[0.19,'SES-RJ','10/03/2026','PNCP'],[0.24,'Pref. RJ','22/02/2026','PNCP'],
+       [0.21,'SES-MG','11/01/2026','BPS'],[0.58,'Pref. Y','05/03/2026','PNCP'],
+       [0.20,'HUAP-UFF','19/12/2025','BPS']],0.35),
+    mk('Omeprazol 40 mg, pó liofilizado injetável, frasco-ampola','BR0269110','Frasco-ampola',
+      [[3.90,'SES-RJ','08/03/2026','PNCP'],[4.15,'INCA','25/02/2026','BPS']],3.50)
+  ];
+  const hit = base.filter(it=> (it.descricao+' '+it.catmat).toLowerCase().includes(term));
+  return hit.length ? hit : base;   // demo nunca volta vazio
+}
+</script>
+</body>
+</html>
