@@ -217,8 +217,13 @@
         </select>
       </div>
       <div class="f span3">
-        <label for="janela">Janela (meses)</label>
-        <input type="number" id="janela" value="12" min="1" max="24">
+        <label for="janela">Janela</label>
+        <select id="janela">
+          <option value="30">30 dias · ~3 s</option>
+          <option value="90">90 dias · ~1 min</option>
+          <option value="180">180 dias · ~3 min</option>
+          <option value="365">365 dias · ~6 min</option>
+        </select>
       </div>
       <div class="f span6">
         <label>Modalidades</label>
@@ -307,7 +312,7 @@ function params(){
     termo: $('#termo').value.trim(),
     catmat: $('#catmat').value.trim(),
     uf: $('#uf').value,
-    meses: $('#janela').value,
+    dias: $('#janela').value,
     modalidades: mods.join(','),
     metodo: $('#metodo').value,
     oinf: $('#oinf').value/100,
@@ -323,7 +328,11 @@ async function consultar(){
   const p = params();
   if(!p.termo && !p.catmat){ erro('Informe um termo ou ao menos um código CATMAT.'); return; }
   $('#btn').disabled = true; $('#btn').textContent='Consultando…';
-  $('#results').innerHTML=''; $('#synth').style.display='none'; showState('loading');
+  $('#results').innerHTML=''; $('#synth').style.display='none';
+  const esperas = {30:'alguns segundos', 90:'até ~1 minuto', 180:'até ~3 minutos', 365:'até ~6 minutos'};
+  $('#loading').querySelector('p').textContent =
+    'Consultando o PNCP ao vivo ('+p.dias+' dias) — '+(esperas[p.dias]||'')+'. Não feche a aba.';
+  showState('loading');
   try{
     const dados = DEMO ? await demo(p) : await real(p);
     render(dados,p);
@@ -337,7 +346,7 @@ function real(p){
   return new Promise((resolve, reject)=>{
     const cb = 'jsonp_' + Date.now();
     const s = document.createElement('script');
-    const timer = setTimeout(()=>{ cleanup(); reject(new Error('Tempo esgotado — a consulta demorou demais no servidor.')); }, 300000);
+    const timer = setTimeout(()=>{ cleanup(); reject(new Error('Tempo esgotado — a janela escolhida é grande demais; tente uma menor.')); }, 370000);
     function cleanup(){ delete window[cb]; if(s.parentNode) s.remove(); clearTimeout(timer); }
     window[cb] = data => { cleanup(); resolve(data); };
     s.onerror = () => { cleanup(); reject(new Error('Falha ao carregar do servidor. Confira a URL /exec e a implantação.')); };
@@ -349,10 +358,16 @@ function real(p){
 function erro(msg){ $('#error-msg').textContent=msg; showState('error'); }
 
 /* ---------- render ---------- */
-function render(itens,p){
-  if(!Array.isArray(itens) || !itens.length){
+function render(dados,p){
+  // aceita tanto o array do modo demo quanto {itens, meta} do backend ao vivo
+  const itens = Array.isArray(dados) ? dados : (dados && dados.itens) || [];
+  const meta  = (dados && dados.meta) || null;
+
+  if(!itens.length){
     $('#empty').querySelector('h2').textContent='Nenhum preço encontrado';
-    $('#empty').querySelector('p').textContent='Nenhuma contratação com esse objeto na janela e filtros informados. Amplie a janela, revise o termo ou inclua outras modalidades.';
+    $('#empty').querySelector('p').textContent = meta && meta.parcial
+      ? 'A varredura atingiu o limite de tempo antes de achar preços ('+meta.contratacoes+' contratações vistas). Reduza a janela, use um termo que apareça no objeto do edital, ou consulte por CATMAT/CATSER.'
+      : 'Nenhuma contratação com esse objeto na janela e filtros. Amplie a janela, revise o termo ou inclua outras modalidades.';
     showState('empty'); return;
   }
   showState(null);
@@ -361,7 +376,17 @@ function render(itens,p){
     if(it.precoReguladoCMED && it.precoEstimado>it.precoReguladoCMED) nA++; });
   $('#s-itens').textContent=itens.length;
   $('#s-pncp').textContent=nP; $('#s-bps').textContent=nB; $('#s-alert').textContent=nA;
-  $('#s-when').innerHTML='Consulta em <b>'+new Date().toLocaleString('pt-BR')+'</b><br>UF '+(p.uf||'todas')+' · janela '+p.meses+' meses · '+p.metodo;
+
+  let quando = 'Consulta em <b>'+new Date().toLocaleString('pt-BR')+'</b>';
+  if(meta){
+    const cobertura = meta.parcial
+      ? '<b style="color:var(--alert)">parcial</b> — limite de tempo atingido'
+      : '<b>completa</b>';
+    quando += '<br>'+meta.dias+' dias · '+meta.segundos+' s · '+cobertura
+           +'<br>'+meta.contratacoes+' contratações · '+meta.descidos+' abertas';
+  }
+  quando += '<br>UF '+(p.uf||'todas')+' · '+p.metodo;
+  $('#s-when').innerHTML=quando;
   $('#synth').style.display='flex';
 
   const box=$('#results');
