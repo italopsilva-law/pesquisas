@@ -1,1 +1,38 @@
+# .github/workflows/pncp-daily.yml
+# Atualização diária: pega só o dia anterior e mescla no JSON.
+# Roda sozinho todo dia; também pode ser disparado manualmente.
+name: PNCP daily
 
+on:
+  schedule:
+    - cron: "0 9 * * *"      # 09:00 UTC ≈ 06:00 BRT, todo dia
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pncp-crawl          # mesmo grupo do backfill: nunca rodam juntos
+  cancel-in-progress: false
+
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Crawl ontem
+        env:
+          UF: RJ
+          MODALIDADES: "6,8"
+        run: node crawl.js --yesterday
+      - name: Commit dados
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "PNCP diário ($(date -u +%F))" || echo "nada a commitar"
+          git push
