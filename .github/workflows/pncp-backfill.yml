@@ -1,1 +1,46 @@
+# .github/workflows/pncp-backfill.yml
+# Backfill sob demanda: preenche N meses de histórico do PNCP.
+# Rode manualmente em Actions › "PNCP backfill" › Run workflow.
+name: PNCP backfill
 
+on:
+  workflow_dispatch:
+    inputs:
+      meses:
+        description: "Quantos meses para trás varrer"
+        required: true
+        default: "12"
+      force:
+        description: "Refazer meses já existentes? (1 = sim)"
+        required: false
+        default: "0"
+
+permissions:
+  contents: write            # necessário para o commit do JSON
+
+concurrency:                 # evita duas rodadas pisando uma na outra
+  group: pncp-crawl
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350     # Actions permite até 360 min (6 h)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Crawl backfill
+        env:
+          UF: RJ
+          MODALIDADES: "6,8"
+          FORCE: ${{ github.event.inputs.force }}
+        run: node crawl.js --backfill ${{ github.event.inputs.meses }}
+      - name: Commit dados
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git commit -m "PNCP backfill (${{ github.event.inputs.meses }} meses)" || echo "nada a commitar"
+          git push
