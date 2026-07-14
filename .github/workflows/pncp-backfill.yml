@@ -18,14 +18,14 @@ on:
 permissions:
   contents: write            # necessário para o commit do JSON
 
-concurrency:                 # evita duas rodadas pisando uma na outra
-  group: pncp-crawl
+concurrency:
+  group: pncp-crawl          # evita duas rodadas pisando uma na outra
   cancel-in-progress: false
 
 jobs:
   backfill:
     runs-on: ubuntu-latest
-    timeout-minutes: 350     # Actions permite até 360 min (6 h)
+    timeout-minutes: 350       # Actions permite até 360 min (6 h)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,14 +33,15 @@ jobs:
           node-version: "20"
       - name: Crawl backfill
         env:
-          UF: RJ
+          UF: "" # todas as UFs (Brasil)
           MODALIDADES: "6,8"
+          RESULTS: "1"
           FORCE: ${{ github.event.inputs.force }}
         run: node crawl.js --backfill ${{ github.event.inputs.meses }}
       - name: Commit dados
         run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git commit -m "PNCP backfill (${{ github.event.inputs.meses }} meses)" || echo "nada a commitar"
+          git commit -m "PNCP backfill (${{ github.event.inputs.meses }} meses)" || echo "nada a commitarem"
           git push
