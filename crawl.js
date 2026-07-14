@@ -19,38 +19,56 @@
  *    USE_ATUALIZACAO=1 usa o endpoint de atualização no range/day
  * ============================================================================
  */
+
 const fs = require('fs');
 const path = require('path');
+
 const CFG = {
   CONSULTA: 'https://pncp.gov.br/api/consulta',
   PNCP: 'https://pncp.gov.br/api/pncp',
   UF: process.env.UF || '',                                      // Vazio = todas as UFs (Brasil)
   MODALIDADES: (process.env.MODALIDADES || '6,8').split(',').map(Number), // 6=Pregão 8=Dispensa
   TAMANHO_PAGINA: 50,                                            // máximo aceito
-  CONCORRENCIA: Number(process.env.CONCORRENCIA || 12),
+  CONCORRENCIA: Number(process.env.CONCORRENCIA || 3),           // Reduzido para 3 para evitar rate limiting (429)
   RESULTS: process.env.RESULTS !== '0',                          // Ativo por padrão
   FORCE: process.env.FORCE === '1',
   USE_ATUALIZACAO: process.env.USE_ATUALIZACAO === '1',
   OUT: path.join(process.cwd(), 'data')
 };
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 /* ---- fetch com retry/backoff (PNCP cai às vezes) ---- */
 async function getJson(url, retries = 4) {
   for (let a = 0; a <= retries; a++) {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 12000); // 12 segundos de timeout
     try {
-      const r = await fetch(url, { headers: { accept: '*/*' } });
+      const r = await fetch(url, { 
+        headers: { accept: '*/*' },
+        signal: controller.signal
+      });
+      clearTimeout(id);
       if (r.status === 200) return await r.json();
       if (r.status === 204) return null;
       if (r.status === 400) { const e = new Error('HTTP400'); e.code = 400; e.body = await r.text(); throw e; }
-      if (r.status >= 500 || r.status === 429) throw new Error('HTTP' + r.status);
+      if (r.status === 429) {
+        const tempoEspera = 3000 * Math.pow(2, a);
+        console.warn(`  [429] Rate limit atingido no PNCP. Aguardando ${tempoEspera / 1000}s antes de tentar novamente...`);
+        await sleep(tempoEspera);
+        throw new Error('HTTP429');
+      }
+      if (r.status >= 500) throw new Error('HTTP' + r.status);
       return null;                              // outros 4xx: ignora
     } catch (err) {
+      clearTimeout(id);
       if (err.code === 400) throw err;
       if (a === retries) { console.error('  ! falha', url.slice(-60), err.message); return null; }
-      await sleep(600 * Math.pow(2, a));
+      await sleep(1500 * Math.pow(2, a));       // Recuo padrão aumentado para 1.5s
     }
   }
 }
+
 /* ---- pool de concorrência simples (sem dependências) ---- */
 async function pool(items, size, worker) {
   const out = new Array(items.length);
@@ -60,6 +78,7 @@ async function pool(items, size, worker) {
   }));
   return out;
 }
+
 /* ---- pool de concorrência simples (sem dependências) ---- */
 const fmt = d => d.toISOString().slice(0, 10).replace(/-/g, '');
 const parse = s => new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8));
@@ -68,6 +87,7 @@ function eachDay(iniYmd, fimYmd) {
   for (let d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) out.push(fmt(new Date(d)));
   return out;
 }
+
 /* ---- URLs ---- */
 const urlContrat = (dia, mod, pag, useAtualizacao = false) =>
   `${CFG.CONSULTA}/v1/contratacoes/${useAtualizacao ? 'atualizacao' : 'publicacao'}?dataInicial=${dia}&dataFinal=${dia}` +
@@ -75,6 +95,7 @@ const urlContrat = (dia, mod, pag, useAtualizacao = false) =>
   `&pagina=${pag}&tamanhoPagina=${CFG.TAMANHO_PAGINA}`;
 const urlItens = c => `${CFG.PNCP}/v1/orgaos/${c.cnpj}/compras/${c.ano}/${c.seq}/itens`;
 const urlResult = (c, n) => `${urlItens(c)}/${n}/resultados`;
+
 /* ---- listar contratações de UM dia (todas as páginas, todas as modalidades) ---- */
 async function listarDia(dia, useAtualizacao = false) {
   const compras = [];
@@ -107,6 +128,7 @@ async function listarDia(dia, useAtualizacao = false) {
   }
   return compras;
 }
+
 /* ---- baixar itens de uma lista de contratações → registros enxutos ---- */
 async function itensDe(compras) {
   const registros = [];
@@ -156,6 +178,7 @@ async function itensDe(compras) {
   }
   return registros;
 }
+
 /* ---- crawl de um intervalo → registros ---- */
 async function crawlRange(iniYmd, fimYmd, useAtualizacao = false) {
   const dias = eachDay(iniYmd, fimYmd);
@@ -168,6 +191,7 @@ async function crawlRange(iniYmd, fimYmd, useAtualizacao = false) {
   }
   return todos;
 }
+
 /* ---- gravação com merge/dedupe por partição mensal ---- */
 function mesDe(dtISO) { return (dtISO || '').slice(0, 7) || 'sem-data'; }
 function mergeMes(mes, novos) {
@@ -205,6 +229,7 @@ function atualizarManifest() {
     JSON.stringify({ atualizadoEm: new Date().toISOString(), uf: CFG.UF, meses }, null, 2));
   console.log('manifest:', meses.map(m => `${m.mes}:${m.itens}`).join('  '));
 }
+
 /* ---- crawl de um mês (com skip se já existe) ---- */
 async function crawlMes(ym) {
   const arq = path.join(CFG.OUT, `${ym}.json`);
@@ -216,11 +241,13 @@ async function crawlMes(ym) {
   const regs = await crawlRange(ini, fim, CFG.USE_ATUALIZACAO);
   console.log('  gravado:', gravar(regs));
 }
+
 /* ---- CLI ---- */
 async function main() {
   const [mode, a, b] = process.argv.slice(2);
   const t0 = Date.now();
   console.log(`PNCP crawler | UF=${CFG.UF || 'todas (Brasil)'} | modalidades=${CFG.MODALIDADES} | homologados_apenas=${CFG.RESULTS} | use_atualizacao=${CFG.USE_ATUALIZACAO}`);
+
   if (mode === '--backfill') {
     const n = Number(a || 12);
     const hoje = new Date();
