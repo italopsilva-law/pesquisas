@@ -29,7 +29,7 @@ const CFG = {
   UF: process.env.UF || '',                                      // Vazio = todas as UFs (Brasil)
   MODALIDADES: (process.env.MODALIDADES || '6,8').split(',').map(Number), // 6=Pregão 8=Dispensa
   TAMANHO_PAGINA: 50,                                            // máximo aceito
-  CONCORRENCIA: Number(process.env.CONCORRENCIA || 3),           // Reduzido para 3 para evitar rate limiting (429)
+  CONCORRENCIA: Number(process.env.CONCORRENCIA || 1),           // 1 para evitar rate limiting (429) do PNCP
   RESULTS: process.env.RESULTS !== '0',                          // Ativo por padrão
   FORCE: process.env.FORCE === '1',
   USE_ATUALIZACAO: process.env.USE_ATUALIZACAO === '1',
@@ -42,7 +42,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function getJson(url, retries = 4) {
   for (let a = 0; a <= retries; a++) {
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 12000); // 12 segundos de timeout
+    const id = setTimeout(() => controller.abort(), 30000); // 30 segundos de timeout
     try {
       const r = await fetch(url, { 
         headers: { accept: '*/*' },
@@ -53,7 +53,7 @@ async function getJson(url, retries = 4) {
       if (r.status === 204) return null;
       if (r.status === 400) { const e = new Error('HTTP400'); e.code = 400; e.body = await r.text(); throw e; }
       if (r.status === 429) {
-        const tempoEspera = 3000 * Math.pow(2, a);
+        const tempoEspera = 10000 * Math.pow(2, a); // 10s, 20s, 40s, 80s
         console.warn(`  [429] Rate limit atingido no PNCP. Aguardando ${tempoEspera / 1000}s antes de tentar novamente...`);
         await sleep(tempoEspera);
         throw new Error('HTTP429');
@@ -64,7 +64,7 @@ async function getJson(url, retries = 4) {
       clearTimeout(id);
       if (err.code === 400) throw err;
       if (a === retries) { console.error('  ! falha', url.slice(-60), err.message); return null; }
-      await sleep(1500 * Math.pow(2, a));       // Recuo padrão aumentado para 1.5s
+      await sleep(3000 * Math.pow(2, a));       // Recuo padrão: 3s, 6s, 12s, 24s
     }
   }
 }
@@ -189,7 +189,9 @@ async function itensDe(compras) {
 async function crawlRange(iniYmd, fimYmd, useAtualizacao = false) {
   const dias = eachDay(iniYmd, fimYmd);
   let todos = [];
-  for (const dia of dias) {
+  for (let idx = 0; idx < dias.length; idx++) {
+    const dia = dias[idx];
+    if (idx > 0) await sleep(2000); // pausa de 2s entre dias para não sobrecarregar a API
     const compras = await listarDia(dia, useAtualizacao);
     const regs = await itensDe(compras);
     todos = todos.concat(regs);
