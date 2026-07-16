@@ -156,7 +156,11 @@ async function itensDe(compras) {
       };
       
       if (CFG.RESULTS) {
-        paraResultado.push({ c, n: it.numeroItem, reg });
+        // Só busca /resultados se o item já tem resultado homologado — evita chamadas inúteis
+        if (it.temResultado) {
+          paraResultado.push({ c, n: it.numeroItem, reg });
+        }
+        // Itens sem resultado homologado são descartados silenciosamente
       } else {
         registros.push(reg); // se não busca resultados, guarda o estimado
       }
@@ -164,6 +168,8 @@ async function itensDe(compras) {
   });
   
   if (CFG.RESULTS && paraResultado.length) {
+    const totalItens = listas.reduce((s, l) => s + (Array.isArray(l) ? l.length : 0), 0);
+    console.log(`    → ${paraResultado.length} itens com temResultado=true (de ${totalItens} total) — buscando homologados...`);
     await pool(paraResultado, CFG.CONCORRENCIA, async x => {
       const res = await getJson(urlResult(x.c, x.n));
       if (Array.isArray(res) && res.length) {
