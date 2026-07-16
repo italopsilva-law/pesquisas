@@ -1,5 +1,5 @@
 # .github/workflows/pncp-daily.yml
-# Atualização diária: pega os últimos 30 dias de contratações para cobrir as conclusões de licitações.
+# Atualização diária: pega os últimos 7 dias de contratações para cobrir homologações recentes.
 # Roda sozinho todo dia; também pode ser disparado manualmente.
 name: PNCP daily
 
@@ -18,28 +18,28 @@ concurrency:
 jobs:
   daily:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - name: Crawl periodo recente (30 dias) com atualizacao e homologados
+      - name: Crawl periodo recente (7 dias) com homologados
         env:
           UF: "" # todas as UFs (Brasil)
-          MODALIDADES: "6,8"
+          MODALIDADES: "6,7,8,9,4,5,2,12"
           RESULTS: "1"
           FORCE: "1"
           USE_ATUALIZACAO: "1"
         run: |
-          START_DATE=$(date -d "30 days ago" +%Y%m%d)
+          START_DATE=$(date -d "7 days ago" +%Y%m%d)
           END_DATE=$(date +%Y%m%d)
-          echo "Rodando para a janela de 30 dias atrás: de $START_DATE até $END_DATE"
+          echo "Rodando para a janela de 7 dias atrás: de $START_DATE até $END_DATE"
           node crawl.js --range $START_DATE $END_DATE
       - name: Commit dados
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
-          git commit -m "PNCP diario (Janela 30 dias: $(date -u +%F))" || echo "nada a commitarem"
+          git commit -m "PNCP diario (Janela 7 dias: $(date -u +%F))" || echo "nada a commitarem"
           git push
