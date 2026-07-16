@@ -34,7 +34,7 @@ jobs:
       - name: Crawl backfill
         env:
           UF: "" # todas as UFs (Brasil)
-          MODALIDADES: "6,8"
+          MODALIDADES: "6,7,8,9,4,5,2,12"
           RESULTS: "1"
           FORCE: ${{ github.event.inputs.force }}
         run: node crawl.js --backfill ${{ github.event.inputs.meses }}
